@@ -140,6 +140,9 @@ def main():
     # parameters
     stamped = node.declare_parameter('stamped', False).value
     frame_id = node.declare_parameter('frame_id', '').value
+    speed = node.declare_parameter('speed', 0.5).value
+    turn = node.declare_parameter('turn', 1.0).value
+
     if not stamped and frame_id:
         raise Exception("'frame_id' can only be set when 'stamped' is True")
 
@@ -153,8 +156,6 @@ def main():
     spinner = threading.Thread(target=rclpy.spin, args=(node,))
     spinner.start()
 
-    speed = 0.5
-    turn = 1.0
     x = 0.0
     y = 0.0
     z = 0.0
@@ -229,3 +230,10 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# speed
+# turn
+# rate
+# keyboard time
+#  
