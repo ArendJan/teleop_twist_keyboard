@@ -46,3 +46,7 @@ CTRL-C to quit
   - If false (the default), publish a `geometry_msgs/msg/Twist` message.  If true, publish a `geometry_msgs/msg/TwistStamped` message.
 - `frame_id (string, default: '')`
   - When `stamped` is true, the frame_id to use when publishing the `geometry_msgs/msg/TwistStamped` message.
+- `speed (dobule, default: 0.5)`
+  - The speed the node starts with by default.
+- `turn (dobule, default: 1.0)`
+  - The rurn rate (rad/s) the node starts with by default.
