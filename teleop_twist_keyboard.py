@@ -230,10 +230,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# speed
-# turn
-# rate
-# keyboard time
-#  
