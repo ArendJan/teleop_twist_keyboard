@@ -134,6 +134,7 @@ def restoreTerminalSettings(old_settings):
 def vels(speed, turn):
     return 'currently:\tspeed %s\tturn %s ' % (speed, turn)
 
+
 class PublishThread(threading.Thread):
     def __init__(self, rate, stamped, node):
         super(PublishThread, self).__init__()
@@ -143,7 +144,8 @@ class PublishThread(threading.Thread):
             self.TwistMsg = geometry_msgs.msg.Twist
         self.stamped = stamped
         self.node = node
-        self.publisher = self.node.create_publisher(self.TwistMsg, 'cmd_vel', 10)
+        self.publisher = self.node.create_publisher(self.TwistMsg,
+                                                    'cmd_vel', 10)
         self.x = 0.0
         self.y = 0.0
         self.z = 0.0
@@ -205,8 +207,9 @@ class PublishThread(threading.Thread):
             twist.angular.z = self.th * self.turn
 
             self.condition.release()
-            
-            all_zero = (twist.linear.x == 0.0 and twist.linear.y == 0.0 and twist.linear.z == 0.0 and twist.angular.z == 0.0)
+
+            all_zero = (twist.linear.x == 0.0 and twist.linear.y == 0.0
+                        and twist.linear.z == 0.0 and twist.angular.z == 0.0)
             if(not all_zero or not self.last_sent_zero):
                 # Publish zero only once
                 self.publisher.publish(twist_msg)
@@ -220,6 +223,7 @@ class PublishThread(threading.Thread):
         twist.angular.y = 0.0
         twist.angular.z = 0.0
         self.publisher.publish(twist_msg)
+
 
 def main():
     settings = saveTerminalSettings()
