@@ -36,6 +36,7 @@ import threading
 
 import geometry_msgs.msg
 import rclpy
+from select import select
 
 if sys.platform == 'win32':
     import msvcrt
@@ -102,14 +103,18 @@ speedBindings = {
 }
 
 
-def getKey(settings):
+def getKey(settings, timeout):
     if sys.platform == 'win32':
         # getwch() returns a string on Windows
         key = msvcrt.getwch()
     else:
         tty.setraw(sys.stdin.fileno())
         # sys.stdin.read() returns a string on Linux
-        key = sys.stdin.read(1)
+        rlist, _, _ = select([sys.stdin], [], [], timeout)
+        if rlist:
+            key = sys.stdin.read(1)
+        else:
+            key = ''
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 
@@ -129,6 +134,92 @@ def restoreTerminalSettings(old_settings):
 def vels(speed, turn):
     return 'currently:\tspeed %s\tturn %s ' % (speed, turn)
 
+class PublishThread(threading.Thread):
+    def __init__(self, rate, stamped, node):
+        super(PublishThread, self).__init__()
+        if stamped:
+            self.TwistMsg = geometry_msgs.msg.TwistStamped
+        else:
+            self.TwistMsg = geometry_msgs.msg.Twist
+        self.stamped = stamped
+        self.node = node
+        self.publisher = self.node.create_publisher(self.TwistMsg, 'cmd_vel', 10)
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
+        self.th = 0.0
+        self.speed = 0.0
+        self.turn = 0.0
+        self.condition = threading.Condition()
+        self.done = False
+        self.last_sent_zero = False
+        # Set timeout to None if rate is 0 (causes new_message to wait forever
+        # for new data to publish)
+        if rate != 0.0:
+            self.timeout = 1.0 / rate
+        else:
+            self.timeout = None
+        print(rate, self.timeout)
+        self.start()
+
+    def update(self, x, y, z, th, speed, turn):
+        self.condition.acquire()
+        self.x = x
+        self.y = y
+        self.z = z
+        self.th = th
+        self.speed = speed
+        self.turn = turn
+        # Notify publish thread that we have a new message.
+        self.condition.notify()
+        self.condition.release()
+
+    def stop(self):
+        self.done = True
+        self.update(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        self.join()
+
+    def run(self):
+        twist_msg = self.TwistMsg()
+
+        if self.stamped:
+            twist = twist_msg.twist
+            twist_msg.header.stamp = self.node.get_clock().now().to_msg()
+            twist_msg.header.frame_id = self.frame_id
+        else:
+            twist = twist_msg
+        while not self.done:
+            if self.stamped:
+                twist_msg.header.stamp = self.node.get_clock().now().to_msg()
+                twist_msg.header.frame_id = self.frame_id
+            self.condition.acquire()
+            # Wait for a new message or timeout.
+            self.condition.wait(self.timeout)
+
+            # Copy state into twist message.
+            twist.linear.x = self.x * self.speed
+            twist.linear.y = self.y * self.speed
+            twist.linear.z = self.z * self.speed
+            twist.angular.x = 0.0
+            twist.angular.y = 0.0
+            twist.angular.z = self.th * self.turn
+
+            self.condition.release()
+            
+            all_zero = (twist.linear.x == 0.0 and twist.linear.y == 0.0 and twist.linear.z == 0.0 and twist.angular.z == 0.0)
+            if(not all_zero or not self.last_sent_zero):
+                # Publish zero only once
+                self.publisher.publish(twist_msg)
+            self.last_sent_zero = all_zero
+
+        # Publish stop message when thread exits.
+        twist.linear.x = 0.0
+        twist.linear.y = 0.0
+        twist.linear.z = 0.0
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        twist.angular.z = 0.0
+        self.publisher.publish(twist_msg)
 
 def main():
     settings = saveTerminalSettings()
@@ -138,20 +229,16 @@ def main():
     node = rclpy.create_node('teleop_twist_keyboard')
 
     # parameters
+    key_timeout = node.declare_parameter('key_timeout', 0.5).value
+    rate = node.declare_parameter('rate', 20.0).value
     stamped = node.declare_parameter('stamped', False).value
     frame_id = node.declare_parameter('frame_id', '').value
     if not stamped and frame_id:
         raise Exception("'frame_id' can only be set when 'stamped' is True")
 
-    if stamped:
-        TwistMsg = geometry_msgs.msg.TwistStamped
-    else:
-        TwistMsg = geometry_msgs.msg.Twist
-
-    pub = node.create_publisher(TwistMsg, 'cmd_vel', 10)
-
     spinner = threading.Thread(target=rclpy.spin, args=(node,))
     spinner.start()
+    pub_thread = PublishThread(rate, stamped, node)
 
     speed = 0.5
     turn = 1.0
@@ -160,21 +247,13 @@ def main():
     z = 0.0
     th = 0.0
     status = 0.0
-
-    twist_msg = TwistMsg()
-
-    if stamped:
-        twist = twist_msg.twist
-        twist_msg.header.stamp = node.get_clock().now().to_msg()
-        twist_msg.header.frame_id = frame_id
-    else:
-        twist = twist_msg
+    pub_thread.update(x, y, z, th, speed, turn)
 
     try:
         print(msg)
         print(vels(speed, turn))
         while True:
-            key = getKey(settings)
+            key = getKey(settings, key_timeout)
             if key in moveBindings.keys():
                 x = moveBindings[key][0]
                 y = moveBindings[key][1]
@@ -189,6 +268,8 @@ def main():
                     print(msg)
                 status = (status + 1) % 15
             else:
+                if key == '' and x == 0 and y == 0 and z == 0 and th == 0:
+                    continue
                 x = 0.0
                 y = 0.0
                 z = 0.0
@@ -196,31 +277,13 @@ def main():
                 if (key == '\x03'):
                     break
 
-            if stamped:
-                twist_msg.header.stamp = node.get_clock().now().to_msg()
-
-            twist.linear.x = x * speed
-            twist.linear.y = y * speed
-            twist.linear.z = z * speed
-            twist.angular.x = 0.0
-            twist.angular.y = 0.0
-            twist.angular.z = th * turn
-            pub.publish(twist_msg)
+            pub_thread.update(x, y, z, th, speed, turn)
 
     except Exception as e:
         print(e)
 
     finally:
-        if stamped:
-            twist_msg.header.stamp = node.get_clock().now().to_msg()
-
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
-        pub.publish(twist_msg)
+        pub_thread.stop()
         rclpy.shutdown()
         spinner.join()
 
