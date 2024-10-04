@@ -31,12 +31,12 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from select import select
 import sys
 import threading
 
 import geometry_msgs.msg
 import rclpy
-from select import select
 
 if sys.platform == 'win32':
     import msvcrt
@@ -136,6 +136,7 @@ def vels(speed, turn):
 
 
 class PublishThread(threading.Thread):
+
     def __init__(self, rate, stamped, node):
         super(PublishThread, self).__init__()
         if stamped:
