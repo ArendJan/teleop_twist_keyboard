@@ -46,3 +46,7 @@ CTRL-C to quit
   - If false (the default), publish a `geometry_msgs/msg/Twist` message.  If true, publish a `geometry_msgs/msg/TwistStamped` message.
 - `frame_id (string, default: '')`
   - When `stamped` is true, the frame_id to use when publishing the `geometry_msgs/msg/TwistStamped` message.
+- `keyboard_timeout (double, default: 0.5)`
+  - timeout for keyboard input. When holding a key, the second key event will take some more time than the events after that. This will keep sending the original value for this timeout to not have a hiccup at the start. Will have the robot keep driving after a key release until the timeout.
+- `rate (double, default:20)`
+  - rate to send the cmd_vel with during the keyboard_timeout. While pressing a key, then the repeat-interval of your OS will set it at some rate (often 30+Hz)
