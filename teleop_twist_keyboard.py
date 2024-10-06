@@ -211,7 +211,7 @@ class PublishThread(threading.Thread):
 
             all_zero = (twist.linear.x == 0.0 and twist.linear.y == 0.0
                         and twist.linear.z == 0.0 and twist.angular.z == 0.0)
-            if(not all_zero or not self.last_sent_zero):
+            if (not all_zero or not self.last_sent_zero):
                 # Publish zero only once
                 self.publisher.publish(twist_msg)
             self.last_sent_zero = all_zero
